@@ -110,7 +110,29 @@ test("connections: validation, pruning after delete, report table", async () => 
   const blocks = Planner.report(project, Planner.analyze(project));
   const table = blocks[blocks.findIndex((b) => b.type === "h" && b.text === "Connections") + 1];
   assert.equal(table.rows.length, 9);
-  assert.deepEqual(table.rows[0], ["R1-B1 – I/O board", "Door 1.01", "R1-R2, I1-I2"]);
+  const b1 = find(project, (n) => n.name === "R1-B1"), d101 = find(project, (n) => n.name === "1.01");
+  assert.deepEqual(table.rows[0], [{ parts: [{ text: "R1-B1 – I/O board", link: b1.id }] },
+    { parts: [{ text: "Door 1.01", link: d101.id }] }, "R1-R2, I1-I2"]);
+});
+
+test("PDF: connections are clickable links to the node's row", async () => {
+  const { PDFDocument, PDFName, PDFArray, PDFDict } = require("../editor/vendor/pdf-lib.min.js");
+  const project = sampleProject();
+  const doc = await PDFDocument.load(await PlannerPdf.exportPdf(project, []));
+  const pageRefs = doc.getPages().map((pg) => pg.ref.toString());
+  let linkCount = 0;
+  for (const pg of doc.getPages()) {
+    const annots = pg.node.lookupMaybe(PDFName.of("Annots"), PDFArray);
+    for (let i = 0; annots && i < annots.size(); i++) {
+      const a = annots.lookup(i, PDFDict);
+      if (a.lookup(PDFName.of("Subtype")).toString() !== "/Link") continue;
+      const dest = a.lookup(PDFName.of("Dest"), PDFArray);
+      assert.ok(pageRefs.includes(dest.get(0).toString()), "link points at a page of this document");
+      linkCount++;
+    }
+  }
+  // each of the 9 connections: once on each end in the subtree tables + from/to in the connections table
+  assert.equal(linkCount, 9 * 4);
 });
 
 test("photos: missing bytes, bad names and duplicates are rejected", async () => {

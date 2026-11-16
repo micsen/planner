@@ -94,7 +94,12 @@ button.danger { color: var(--err); }
 /* preview */
 .pv h1 { font-size: 22px; margin: 0 0 8px; } .pv h2 { font-size: 16px; margin: 24px 0 8px; }
 .pv p { margin: 0 0 8px; white-space: pre-line; } .pv p.warn { color: var(--wr); }
-.pv h3 { font-size: 14px; margin: 16px 0 6px; } .pv .photos { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.pv h3 { font-size: 14px; margin: 16px 0 6px; }
+.pv .photos { display: flex; flex-wrap: wrap; gap: 12px; }
+.pv .ph { flex: 0 1 auto; max-width: 100%; }
+.pv .ph img { height: min(60vh, 520px); width: auto; max-width: 100%; aspect-ratio: auto; object-fit: contain; background: none; }
+.pv a { color: var(--ac); text-decoration: none; } .pv a:hover { text-decoration: underline; }
+.pv tr.flash td { background: color-mix(in srgb, var(--ac) 18%, transparent); transition: background .3s; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
 .kpi { background: var(--cd); border-radius: var(--radius); padding: 10px 14px; }
 .kpi b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; } .kpi span { color: var(--mut); font-size: 12px; }

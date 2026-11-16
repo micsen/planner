@@ -210,7 +210,7 @@
     const cur = pr.currency;
     const r = p.root;
     const blocks = [
-      { type: "title", text: r.name },
+      { type: "title", text: r.name, anchor: r.id },
       ...(has(r.description) ? [{ type: "p", text: r.description }] : []),
       { type: "kpis", items: [...Object.entries(res.typeCounts).map(([t, n]) => [t, n]),
         ["Items", res.lines.reduce((s, l) => s + l.qty, 0)], [`Total ${cur} ex. MVA`, fmtPrice(pr.total)]].slice(-6) },
@@ -228,20 +228,27 @@
       blocks.push({ type: "p", warn: true, text: "Not yet priced: " + pr.unpriced.map((l) => `${l.name} (${l.qty})`).join(", ") });
 
     const conns = connections(p);
+    /** Linked "→ X (note)" / "← Y (note)" lines for a node's connections. */
+    const linkParts = (n) => ({ parts: [
+      ...conns.filter((c) => c.from === n).map((c) => ({ text: `→ ${label(p, c.to)}${c.note ? ` (${c.note})` : ""}`, link: c.to.id })),
+      ...conns.filter((c) => c.to === n).map((c) => ({ text: `← ${label(p, c.from)}${c.note ? ` (${c.note})` : ""}`, link: c.from.id })),
+    ] });
     const outline = (top) => {
       const rows = [];
+      const anchors = [];
       for (const c of top.children) walk(c, (n, _parent, depth) => {
         const c2 = n.kind === "item" ? itemOf(p, n) : null;
         const unit = c2 ? unitPrice(c2) : null;
+        anchors.push(n.id);
         rows.push([NBSP.repeat(depth * 4) + (depth ? "› " : "") + label(p, n),
-          n.kind === "item" ? "Item" : n.type, n.description || "", linkSummary(p, n, conns), n.kind === "item" ? n.qty : "",
+          n.kind === "item" ? "Item" : n.type, n.description || "", linkParts(n), n.kind === "item" ? n.qty : "",
           n.kind === "item" && unit !== null ? fmtPrice(unit * n.qty) : ""]);
       });
       const anyItem = rows.some((r) => r[4] !== "");
       if (!anyItem) return { type: "table", headers: ["Structure", "Type", "Description", "Connections"], wrap: [0, 2, 3],
-        rows: rows.map((r) => r.slice(0, 4)) };
+        rows: rows.map((r) => r.slice(0, 4)), anchors };
       return { type: "table", headers: ["Structure", "Type", "Description", "Connections", "Qty", `Price (${cur})`],
-        num: [4, 5], wrap: [0, 2, 3], rows };
+        num: [4, 5], wrap: [0, 2, 3], rows, anchors };
     };
     const details = (top) => {
       const out = [];
@@ -254,9 +261,12 @@
     };
 
     for (const top of r.children.filter((n) => n.kind === "place")) {
-      blocks.push({ type: "h", text: label(p, top) + (has(top.description) ? ` – ${top.description}` : "") });
-      blocks.push(...notesBlocks(top));
+      blocks.push({ type: "h", anchor: top.id, text: label(p, top) + (has(top.description) ? ` – ${top.description}` : "") });
+      // Text first, then the structure table, then the (large) photos.
+      const notes = notesBlocks(top);
+      blocks.push(...notes.filter((b) => b.type !== "photos"));
       if (top.children.length) blocks.push(outline(top));
+      blocks.push(...notes.filter((b) => b.type === "photos"));
       blocks.push(...details(top));
     }
     const loose = r.children.filter((n) => n.kind === "item");
@@ -268,7 +278,8 @@
     if (conns.length) {
       blocks.push({ type: "h", text: "Connections" });
       blocks.push({ type: "table", headers: ["From", "To", "Note"], wrap: [0, 1, 2],
-        rows: conns.map((c) => [label(p, c.from), label(p, c.to), c.note]) });
+        rows: conns.map((c) => [{ parts: [{ text: label(p, c.from), link: c.from.id }] },
+          { parts: [{ text: label(p, c.to), link: c.to.id }] }, c.note]) });
     }
 
     const nPhotos = photoRefs(p).length;

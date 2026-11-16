@@ -475,9 +475,17 @@
   // ---- preview -----------------------------------------------------------------------------
   function renderPreview(res = Planner.analyze(state.project)) {
     if (res.errors.length) return el("p", { class: "empty", textContent: "Fix the problems above to see the report." });
+    const pvId = (id) => (id ? `pv-${id}` : undefined);
+    const cell = (c) => (c && typeof c === "object" && c.parts
+      ? c.parts.map((pt) => el("div", {}, pt.link ? el("a", { href: `#${pvId(pt.link)}`, textContent: pt.text, onclick: (e) => {
+        e.preventDefault();
+        const t = document.getElementById(pvId(pt.link));
+        if (t) { t.scrollIntoView({ block: "center" }); t.classList.add("flash"); setTimeout(() => t.classList.remove("flash"), 1200); }
+      } }) : pt.text))
+      : String(c));
     return el("div", { class: "pv" }, Planner.report(state.project, res).map((b) => {
-      if (b.type === "title") return el("h1", { textContent: b.text });
-      if (b.type === "h") return el("h2", { textContent: b.text });
+      if (b.type === "title") return el("h1", { textContent: b.text, id: pvId(b.anchor) });
+      if (b.type === "h") return el("h2", { textContent: b.text, id: pvId(b.anchor) });
       if (b.type === "h3") return el("h3", { textContent: b.text });
       if (b.type === "p") return el("p", { class: b.warn ? "warn" : "" }, b.label ? [el("b", { textContent: b.label }), el("br")] : null, b.text);
       if (b.type === "kpis") return el("div", { class: "kpis" }, b.items.map(([k, v]) =>
@@ -488,8 +496,8 @@
       const numCols = new Set(b.num || []), bold = new Set(b.bold || []);
       return el("div", { class: "tw" }, el("table", {},
         el("thead", {}, el("tr", {}, b.headers.map((h, i) => el("th", { class: numCols.has(i) ? "n" : "", textContent: h })))),
-        el("tbody", {}, b.rows.map((r, ri) => el("tr", { class: bold.has(ri) ? "tot" : "" },
-          r.map((c, i) => el("td", { class: numCols.has(i) ? "n" : "", textContent: String(c) })))))));
+        el("tbody", {}, b.rows.map((r, ri) => el("tr", { class: bold.has(ri) ? "tot" : "", id: pvId((b.anchors || [])[ri]) },
+          r.map((c, i) => el("td", { class: numCols.has(i) ? "n" : "" }, cell(c))))))));
     }));
   }
 

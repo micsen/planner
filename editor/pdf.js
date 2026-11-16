@@ -49,12 +49,18 @@
     return lines;
   }
 
+  /** A table cell is a string or { parts: [{ text, link? }] } (each part on its own line, link = node id). */
+  const cellParts = (c) => (c && typeof c === "object" && c.parts ? c.parts : [{ text: c === null || c === undefined ? "" : String(c) }]);
+
   function renderReport(doc, fonts, blocks, footer, photos) {
     const [W, H] = PAGE;
     const avail = W - 2 * M;
     const usable = H - 2 * M - 14;
     let page, y;
     const pages = [];
+    const dests = new Map(); // node id -> { page, top }
+    const links = []; // { page, rect, to }
+    const anchor = (id) => { if (id && !dests.has(id)) dests.set(id, { page, top: y }); };
     const newPage = () => { page = doc.addPage(PAGE); pages.push(page); y = H - M; };
     const ensure = (h) => { if (y - h < M + 14) newPage(); };
     const draw = (s, x, yy, size, font, color = C.text) => page.drawText(safe(s), { x, y: yy, size, font, color });
@@ -62,19 +68,22 @@
     const P = { size: 9.5, lh: 13 };
     const paraLines = (blk) => wrap(blk.text, fonts.r, P.size, avail);
     const tables = new Map(blocks.filter((b) => b.type === "table").map((t) => [t, layoutTable(t)]));
-    const PH = { cols: 3, gap: 12, maxH: 180, cap: 8, capLh: 10 };
-    const photoW = (avail - PH.gap * (PH.cols - 1)) / PH.cols;
+    // Photos are large enough to read: ~420 pt tall (2/3 of the page), as many side by side as fit the width.
+    const PH = { gap: 12, h: 420, maxScale: 2, cap: 9, capLh: 11 };
     const photoRows = (blk) => {
       const rows = [];
-      blk.items.forEach((item, i) => {
+      for (const item of blk.items) {
         const img = photos.get(item.file);
-        const k = Math.min(photoW / img.width, PH.maxH / img.height, 1);
-        const cell = { img, w: img.width * k, h: img.height * k, caption: item.caption ? wrap(item.caption, fonts.r, PH.cap, photoW) : [] };
-        if (i % PH.cols === 0) rows.push({ cells: [], h: 0 });
+        const k = Math.min(PH.h / img.height, avail / img.width, PH.maxScale);
+        const w = img.width * k, h = img.height * k;
+        const cell = { img, w, h, caption: item.caption ? wrap(item.caption, fonts.r, PH.cap, Math.max(w, 120)) : [] };
+        const last = rows[rows.length - 1];
+        if (!last || last.w + PH.gap + w > avail) rows.push({ cells: [], w: -PH.gap, h: 0 });
         const row = rows[rows.length - 1];
         row.cells.push(cell);
-        row.h = Math.max(row.h, cell.h + (cell.caption.length ? 4 + cell.caption.length * PH.capLh : 0) + PH.gap);
-      });
+        row.w += PH.gap + w;
+        row.h = Math.max(row.h, h + (cell.caption.length ? 4 + cell.caption.length * PH.capLh : 0) + PH.gap);
+      }
       return rows;
     };
     const height = (blk) => (!blk ? 0 : blk.type === "p" ? (blk.label ? P.lh : 0) + paraLines(blk).length * P.lh + 4
@@ -89,6 +98,7 @@
     newPage();
     blocks.forEach((blk, i) => {
       if (blk.type === "title") {
+        anchor(blk.anchor);
         draw(blk.text, M, y - 18, 18, fonts.b);
         y -= 30;
       } else if (blk.type === "h") {
@@ -96,6 +106,7 @@
         const follow = followHeight(i);
         ensure(30 + (follow <= usable - 30 ? follow : 60));
         y -= 10;
+        anchor(blk.anchor);
         draw(blk.text, M, y - 13, 13, fonts.b);
         y -= 20;
       } else if (blk.type === "h3") {
@@ -107,11 +118,12 @@
       } else if (blk.type === "photos") {
         for (const row of photoRows(blk)) {
           ensure(row.h);
-          row.cells.forEach((c, k) => {
-            const x = M + k * (photoW + PH.gap);
+          let x = M;
+          for (const c of row.cells) {
             page.drawImage(c.img, { x, y: y - c.h, width: c.w, height: c.h });
             c.caption.forEach((line, li) => draw(line, x, y - c.h - 4 - PH.cap - li * PH.capLh, PH.cap, fonts.r, C.muted));
-          });
+            x += c.w + PH.gap;
+          }
           y -= row.h;
         }
       } else if (blk.type === "p") {
@@ -149,7 +161,8 @@
       const fontFor = (ri) => (bold.has(ri) ? fonts.b : fonts.r);
       const natural = t.headers.map((h, ci) => Math.max(
         fonts.b.widthOfTextAtSize(safe(h), size),
-        ...t.rows.map((r, ri) => Math.max(...safe(r[ci]).split("\n").map((x) => fontFor(ri).widthOfTextAtSize(x, size))))) + 2 * pad);
+        ...t.rows.map((r, ri) => Math.max(0, ...cellParts(r[ci]).flatMap((pt) => safe(pt.text).split("\n"))
+          .map((x) => fontFor(ri).widthOfTextAtSize(x, size))))) + 2 * pad);
       let widths = natural.slice();
       let total = widths.reduce((a, x) => a + x, 0);
       if (total > avail) { // shrink wrappable columns first, then everything
@@ -159,12 +172,13 @@
         total = widths.reduce((a, x) => a + x, 0);
         if (total > avail + 0.5) widths = widths.map((x) => (x * avail) / total);
       }
-      const row = (cells, font, fill) => {
-        const lines = cells.map((v, ci) => wrap(v, font, size, widths[ci] - 2 * pad));
-        return { lines, font, fill, h: Math.max(...lines.map((l) => l.length)) * lh + 2 * pad - 2 };
+      const row = (cells, font, fill, anchorId) => {
+        const lines = cells.map((v, ci) => cellParts(v).flatMap((pt) =>
+          wrap(pt.text, font, size, widths[ci] - 2 * pad).map((s) => ({ s, link: pt.link }))));
+        return { lines, font, fill, anchor: anchorId, h: Math.max(1, ...lines.map((l) => l.length)) * lh + 2 * pad - 2 };
       };
       const header = row(t.headers, fonts.b, C.head);
-      const rows = t.rows.map((r, ri) => row(r, fontFor(ri)));
+      const rows = t.rows.map((r, ri) => row(r, fontFor(ri), null, (t.anchors || [])[ri]));
       return { size, pad, lh, num, widths, width: widths.reduce((a, x) => a + x, 0), header, rows,
         total: header.h + rows.reduce((a, r) => a + r.h, 0) };
     }
@@ -172,11 +186,15 @@
     function paintTable(L) {
       const paint = (r) => {
         if (r.fill) page.drawRectangle({ x: M, y: y - r.h, width: L.width, height: r.h, color: r.fill });
+        anchor(r.anchor);
         let x = M;
         r.lines.forEach((ls, ci) => {
-          ls.forEach((s, li) => {
-            const tx = L.num.has(ci) ? x + L.widths[ci] - L.pad - r.font.widthOfTextAtSize(s, L.size) : x + L.pad;
-            page.drawText(s, { x: tx, y: y - L.pad - L.size - li * L.lh + 1, size: L.size, font: r.font, color: C.text });
+          ls.forEach(({ s, link }, li) => {
+            const tw = r.font.widthOfTextAtSize(s, L.size);
+            const tx = L.num.has(ci) ? x + L.widths[ci] - L.pad - tw : x + L.pad;
+            const ty = y - L.pad - L.size - li * L.lh + 1;
+            page.drawText(s, { x: tx, y: ty, size: L.size, font: r.font, color: link ? C.accent : C.text });
+            if (link) links.push({ page, rect: [tx, ty - 2, tx + tw, ty + L.size], to: link });
           });
           x += L.widths[ci];
         });
@@ -189,6 +207,15 @@
         if (y - r.h < M + 14) { newPage(); paint(L.header); }
         paint(r);
       }
+    }
+
+    // Internal links: clicking a connection jumps to where that node is listed.
+    for (const l of links) {
+      const d = dests.get(l.to);
+      if (!d) continue;
+      const annot = doc.context.obj({ Type: "Annot", Subtype: "Link", Rect: l.rect, Border: [0, 0, 0],
+        Dest: [d.page.ref, "XYZ", null, d.top + 6, null] });
+      l.page.node.addAnnot(doc.context.register(annot));
     }
 
     pages.forEach((pg, i) => {
