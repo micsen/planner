@@ -58,7 +58,7 @@
 
   // ---- autosave (IndexedDB: holds binary photos/drawings and far more than localStorage) -------
   const DB_NAME = "project-planner", STORE = "state", KEY = "current";
-  let saveTimer = null, autosave = "pending";
+  let saveTimer = null, autosave = "pending", restoring = true; // no saving until the stored copy has been read
   function db() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
@@ -86,7 +86,7 @@
     n.className = status === "failed" ? "warn" : "";
   }
   function scheduleSave() {
-    if (state.drag) return;
+    if (state.drag || restoring) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 500);
     if (autosave !== "failed") setSaved("saving");
@@ -104,7 +104,8 @@
   }
   async function restore() {
     try {
-      const s = await dbRun("readonly", (st) => st.get(KEY));
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("browser storage did not respond")), 4000));
+      const s = await Promise.race([dbRun("readonly", (st) => st.get(KEY)), timeout]);
       if (!s || !s.project || s.project.format !== Planner.FORMAT) return false;
       Object.assign(state, { project: s.project, drawings: s.drawings || [], images: s.images || new Map(), fileName: s.fileName || null,
         dirty: !!s.dirty, tab: s.tab || "structure", selected: s.selected, collapsed: s.collapsed || new Set() });
@@ -554,11 +555,13 @@
   window.addEventListener("beforeunload", (e) => { if (autosave !== "saved" && state.dirty) { e.preventDefault(); e.returnValue = ""; } });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
 
+  // Draw right away; swap in the autosaved project once browser storage has answered.
+  notice("Open a project PDF (button or drag & drop) or build a new project. Everything stays on this computer and is autosaved in this browser.");
+  state.selected = state.project.root.id;
+  render();
   restore().then((restored) => {
-    if (!restored) {
-      notice("Open a project PDF (button or drag & drop) or build a new project. Everything stays on this computer and is autosaved in this browser.");
-      state.selected = state.project.root.id;
-    }
-    render();
+    restoring = false;
+    if (restored) render();
+    else if (autosave !== "failed") scheduleSave();
   });
 })();
