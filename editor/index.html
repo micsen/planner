@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project planner</title>
+<style>
+:root { color-scheme: light dark;
+  --bg: #ffffff; --fg: #1b1f24; --mut: #5b636e; --bd: #d9dde2; --cd: #f5f6f8; --ac: #2f6fde; --acfg: #fff;
+  --err: #b42318; --errbg: #fef3f2; --wr: #b26a00; --in: #ffffff; --radius: 8px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121417; --fg: #e6e8eb; --mut: #9aa3ad; --bd: #33393f; --cd: #1d2125; --ac: #6c9ef0; --acfg: #0b1220;
+  --err: #f97066; --errbg: #2a1414; --wr: #f0b44c; --in: #181b1f; } }
+:root[data-theme="dark"] { --bg: #121417; --fg: #e6e8eb; --mut: #9aa3ad; --bd: #33393f; --cd: #1d2125; --ac: #6c9ef0;
+  --acfg: #0b1220; --err: #f97066; --errbg: #2a1414; --wr: #f0b44c; --in: #181b1f; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--bd);
+  position: sticky; top: 0; background: var(--bg); z-index: 2; }
+header h1 { font-size: 16px; margin: 0; } header h1 span { color: var(--mut); font-weight: 400; }
+.grow { flex: 1; }
+#summary { color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
+#dirty { color: var(--wr); font-size: 13px; }
+#saved { color: var(--mut); font-size: 12px; } #saved.warn { color: var(--err); }
+button, .btn { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--bd);
+  background: var(--cd); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--ac); border-color: var(--ac); color: var(--acfg); font-weight: 600; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.icon { padding: 2px 8px; }
+.pick:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ac); outline-offset: 1px; }
+nav { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--bd); overflow-x: auto; }
+nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--mut); }
+nav button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--ac); font-weight: 600; }
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+#errors { margin: 12px 16px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--errbg); color: var(--err); font-size: 13px; }
+#errors ul { margin: 4px 0 0; padding-left: 18px; }
+#notice { margin: 12px 16px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--cd); font-size: 13px; }
+fieldset { border: 1px solid var(--bd); border-radius: var(--radius); padding: 12px 16px 16px; margin: 0 0 16px; }
+legend { font-weight: 600; padding: 0 4px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; }
+.fields label { display: grid; gap: 4px; font-size: 12px; color: var(--mut); }
+.fields label.wide { grid-column: 1 / -1; }
+input, select, textarea { font: inherit; font-size: 13px; color: var(--fg); background: var(--in); border: 1px solid var(--bd);
+  border-radius: 6px; padding: 5px 8px; width: 100%; }
+textarea { min-height: 70px; resize: vertical; }
+.tw { overflow-x: auto; border: 1px solid var(--bd); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--bd); vertical-align: middle; }
+th { color: var(--mut); font-weight: 600; font-size: 12px; white-space: nowrap; background: var(--cd); }
+tr:last-child td { border-bottom: 0; }
+td input, td select { border-color: transparent; background: transparent; padding: 4px 6px; min-width: 70px; }
+td input:hover, td select:hover { border-color: var(--bd); }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 10px; }
+.toolbar .hint { color: var(--mut); font-size: 12px; }
+button.danger { color: var(--err); }
+/* structure */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px); gap: 16px; align-items: start; }
+.tree { border: 1px solid var(--bd); border-radius: var(--radius); padding: 6px 0; font-size: 13px; }
+.row { display: flex; align-items: center; gap: 2px; padding-right: 8px; }
+.row.sel { background: color-mix(in srgb, var(--ac) 14%, transparent); }
+.tog { width: 22px; flex: none; border: 0; background: none; padding: 2px 0; color: var(--mut); cursor: pointer; text-align: center; }
+.pick { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 4px 6px; border-radius: 4px; display: flex; gap: 8px;
+  align-items: baseline; overflow: hidden; white-space: nowrap; cursor: pointer; color: var(--fg); font-size: 13px; }
+.pick:hover { background: var(--cd); }
+.row[draggable="true"] { cursor: grab; }
+.row.dragging { opacity: .45; }
+.row.drop-inside { background: color-mix(in srgb, var(--ac) 22%, transparent); outline: 1px dashed var(--ac); outline-offset: -1px; }
+.row.drop-before { box-shadow: inset 0 2px 0 var(--ac); }
+.row.drop-after { box-shadow: inset 0 -2px 0 var(--ac); }
+.row.drop-link { outline: 2px solid var(--wr); outline-offset: -2px; }
+.conn { display: grid; grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+.conn .arrow { color: var(--mut); text-align: center; }
+.linkto { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 8px; }
+.k { font-size: 11px; font-weight: 600; color: var(--ac); text-transform: uppercase; letter-spacing: .02em; }
+.k.item { color: var(--mut); }
+.pick .d { color: var(--mut); overflow: hidden; text-overflow: ellipsis; }
+.pick .b { margin-left: auto; color: var(--mut); font-size: 12px; }
+.details { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; border: 1px solid var(--bd);
+  border-radius: var(--radius); padding: 12px 16px; }
+.details h2 { font-size: 16px; margin: 0 0 12px; }
+.details .fields { grid-template-columns: 1fr 1fr; margin-bottom: 10px; }
+.details fieldset { margin: 12px 0 0; }
+.details details { margin-top: 8px; } .details details textarea { margin: 8px 0; }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.ph { margin: 0; display: grid; gap: 4px; }
+.ph img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--cd); }
+.ph figcaption { color: var(--mut); font-size: 12px; }
+.ph .toolbar { margin: 0; gap: 4px; }
+.hint { color: var(--mut); font-size: 12px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .details { position: static; max-height: none; } }
+.empty { color: var(--mut); padding: 24px; text-align: center; }
+/* preview */
+.pv h1 { font-size: 22px; margin: 0 0 8px; } .pv h2 { font-size: 16px; margin: 24px 0 8px; }
+.pv p { margin: 0 0 8px; white-space: pre-line; } .pv p.warn { color: var(--wr); }
+.pv h3 { font-size: 14px; margin: 16px 0 6px; } .pv .photos { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
+.kpi { background: var(--cd); border-radius: var(--radius); padding: 10px 14px; }
+.kpi b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; } .kpi span { color: var(--mut); font-size: 12px; }
+.pv td { padding: 5px 8px; vertical-align: top; } .pv tr.tot td { font-weight: 600; }
+body.drag::after { content: "Drop a project PDF to open it"; position: fixed; inset: 0; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--bg) 85%, transparent); font-size: 18px; font-weight: 600; border: 3px dashed var(--ac); }
+@media (max-width: 640px) { header { padding: 10px 16px; } main { padding: 12px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Project planner <span id="project-name"></span></h1>
+  <span id="dirty" hidden title="Changes since the last PDF export or import">Not exported</span>
+  <span id="saved" aria-live="polite"></span>
+  <span class="grow"></span>
+  <span id="summary"></span>
+  <button id="btn-new" type="button">New</button>
+  <button id="btn-open" type="button">Open PDF…</button>
+  <button id="btn-export" type="button" class="primary">Export PDF</button>
+  <input id="file-open" type="file" accept="application/pdf,.pdf" hidden>
+</header>
+<nav role="tablist" id="tabs"></nav>
+<div id="notice" hidden></div>
+<div id="errors" hidden></div>
+<main id="view"></main>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="planner.js"></script>
+<script src="pdf.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# Real customer projects and drawings stay local – never push them to the public repo.
+projects/
+drawings/
+node_modules/
