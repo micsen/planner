@@ -20,8 +20,7 @@ Everything runs in your browser. Projects, photos and drawings are never uploade
 
 The report contains:
 - totals per item and a price for each top-level place, with MVA/VAT on top;
-- every top-level place's subtree with its connections, notes and photos;
-- a full connections table (from, to, note) at the end, to use as a wiring schedule.
+- every top-level place's subtree with its notes and photos. Connections are shown on both ends as clickable links that jump to the other node.
 
 ## Using the editor
 

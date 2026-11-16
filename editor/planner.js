@@ -275,12 +275,6 @@
       blocks.push({ type: "h", text: "Site items" }, outline(fake), ...details(fake));
     }
 
-    if (conns.length) {
-      blocks.push({ type: "h", text: "Connections" });
-      blocks.push({ type: "table", headers: ["From", "To", "Note"], wrap: [0, 1, 2],
-        rows: conns.map((c) => [{ parts: [{ text: label(p, c.from), link: c.from.id }] },
-          { parts: [{ text: label(p, c.to), link: c.to.id }] }, c.note]) });
-    }
 
     const nPhotos = photoRefs(p).length;
     const files = ["project.json", ...(p.drawings || []), ...(nPhotos ? [`${nPhotos} photo${nPhotos === 1 ? "" : "s"}`] : []),

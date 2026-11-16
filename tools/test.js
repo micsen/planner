@@ -107,12 +107,13 @@ test("connections: validation, pruning after delete, report table", async () => 
   Planner.pruneLinks(p3);
   assert.deepEqual(Planner.analyze(p3).errors, []);
   assert.equal(Planner.connections(p3).length, 5);
+  // no separate connections table: the links live in the structure tables, on both ends
   const blocks = Planner.report(project, Planner.analyze(project));
-  const table = blocks[blocks.findIndex((b) => b.type === "h" && b.text === "Connections") + 1];
-  assert.equal(table.rows.length, 9);
+  assert.ok(!blocks.some((b) => b.type === "h" && b.text === "Connections"));
   const b1 = find(project, (n) => n.name === "R1-B1"), d101 = find(project, (n) => n.name === "1.01");
-  assert.deepEqual(table.rows[0], [{ parts: [{ text: "R1-B1 – I/O board", link: b1.id }] },
-    { parts: [{ text: "Door 1.01", link: d101.id }] }, "R1-R2, I1-I2"]);
+  const rowOf = (n) => { for (const b of blocks) { const i = (b.anchors || []).indexOf(n.id); if (i >= 0) return b.rows[i]; } };
+  assert.deepEqual(rowOf(b1)[3].parts[0], { text: "→ Door 1.01 (R1-R2, I1-I2)", link: d101.id });
+  assert.deepEqual(rowOf(d101)[3].parts, [{ text: "← R1-B1 – I/O board (R1-R2, I1-I2)", link: b1.id }]);
 });
 
 test("PDF: connections are clickable links to the node's row", async () => {
@@ -131,8 +132,8 @@ test("PDF: connections are clickable links to the node's row", async () => {
       linkCount++;
     }
   }
-  // each of the 9 connections: once on each end in the subtree tables + from/to in the connections table
-  assert.equal(linkCount, 9 * 4);
+  // each of the 9 connections is linked once on each end in the structure tables
+  assert.equal(linkCount, 9 * 2);
 });
 
 test("photos: missing bytes, bad names and duplicates are rejected", async () => {
